@@ -18,13 +18,13 @@ function createDefinition (def, decls = [], wrap = '&', place = '&&') {
 
 		if (k.includes('&')) {
 			let nextWrapper = wrap.replaceAll('&', k);
-			nextDef[k] = create(v, decls, nextWrapper, place);
+			nextDef[k] = createDefiniton(v, decls, nextWrapper, place);
 			continue;
 		}
 
 		if (k.startsWith('@')) {
 			let nextPlacement = place.replaceAll('&&', `${k} { && }`);
-			nextDef[k] = create(v, decls, wrap, nextPlacement);
+			nextDef[k] = createDefinition(v, decls, wrap, nextPlacement);
 			continue;
 		}
 
