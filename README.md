@@ -24,6 +24,18 @@ function App () {
 }
 ```
 
+```jsx
+let button = stylx.create({
+  backgroundColor: 'red',
+
+  selectors: {
+    '&:hover': {
+      backgroundColor: 'blue',
+    },
+  },
+});
+```
+
 ## Inspiration
 
 - [Building the New Facebook with React and Relay][building-facebook]  

@@ -16,15 +16,29 @@ function createDefinition (def, decls = [], wrap = '&', place = '&&') {
 			continue;
 		}
 
-		if (k.includes('&')) {
-			let nextWrapper = wrap.replaceAll('&', k);
-			nextDef[k] = createDefiniton(v, decls, nextWrapper, place);
+		if (k === 'selectors') {
+			nextDef[k] = {};
+
+			for (let s in def[k]) {
+				let d = def[k][s];
+
+				let nextWrapper = wrap.replaceAll('&', s);
+				nextDef[k][s] = createDefinition(d, decls, nextWrapper, place);
+			}
+
 			continue;
 		}
 
-		if (k.startsWith('@')) {
-			let nextPlacement = place.replaceAll('&&', `${k} { && }`);
-			nextDef[k] = createDefinition(v, decls, wrap, nextPlacement);
+		if (k === 'queries') {
+			nextDef[k] = {};
+
+			for (let q in def[k]) {
+				let d = def[k][q];
+
+				let nextPlace = place.replaceAll('&&', `${q} { && }`);
+				nextDef[k][q] = createDefinition(d, decls, wrap, nextPlace);
+			}
+
 			continue;
 		}
 
