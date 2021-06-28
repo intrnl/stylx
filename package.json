@@ -1,0 +1,22 @@
+{
+	"type": "module",
+	"name": "@intrnl/stylx",
+	"description": "An atomic CSS-in-JS library",
+	"version": "0.1.0",
+	"license": "MIT",
+	"author": "intrnl",
+	"repository": {
+		"url": "https://github.com/intrnl/stylx"
+	},
+	"main": "src/index.js",
+	"types": "types/index.d.ts",
+	"files": [
+		"src/",
+		"types/",
+		"LICENSE",
+		"README.md"
+	],
+	"dependencies": {
+		"csstype": "^3.0.8"
+	}
+}
