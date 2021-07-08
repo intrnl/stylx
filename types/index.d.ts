@@ -1,7 +1,7 @@
 import * as CSS from 'csstype';
 
 
-export interface CSSDefinition extends CSS.Properties<string | number> {
+export interface CSSDefinition extends CSS.Properties<string | number | false> {
 	selectors?: { [selector: string]: CSSDefinition };
 	queries?: { [query: string]: CSSDefinition };
 }
