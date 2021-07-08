@@ -1,2 +1,3 @@
-export { create } from './create.js';
-export { apply } from './apply.js';
+import { apply } from './apply.js';
+import { create } from './create.js';
+globalThis._ = { apply, create };
