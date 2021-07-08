@@ -7,4 +7,4 @@ export interface CSSDefinition extends CSS.Properties<string | number> {
 }
 
 export function create (definition: CSSDefinition): CSSDefinition;
-export function apply (...definitions: CSSDefinition[]): string;
+export function apply (...definitions: (CSSDefinition | null | undefined | false)[]): string;
