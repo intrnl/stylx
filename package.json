@@ -2,7 +2,7 @@
 	"type": "module",
 	"name": "@intrnl/stylx",
 	"description": "An atomic CSS-in-JS library",
-	"version": "0.3.3",
+	"version": "0.3.4",
 	"license": "MIT",
 	"author": "intrnl",
 	"repository": {
