@@ -6,5 +6,7 @@ export interface CSSDefinition extends CSS.Properties<string | number | false> {
 	queries?: { [query: string]: CSSDefinition };
 }
 
+type Values = CSSDefinition | null | undefined | false | Values[];
+
 export function create (definition: CSSDefinition): CSSDefinition;
-export function apply (...definitions: (CSSDefinition | null | undefined | false)[]): string;
+export function apply (...definitions: Values[]): string;

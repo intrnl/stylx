@@ -93,7 +93,7 @@ function mergeClassNames (map) {
 export function apply (...defs) {
 	let final = {};
 
-	for (let def of defs) {
+	for (let def of defs.flat(Infinity)) {
 		if (!def) continue;
 
 		let map = DEFINITION_CACHE.get(def);
