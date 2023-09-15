@@ -2,7 +2,7 @@ import { transformAsync } from '@babel/core';
 import stylxPlugin from './dist/babel/index.js';
 
 const source = `
-import * as stylx from 'stylx';
+import * as stylx from '@intrnl/stylx';
 
 const styles = stylx.create({
 	isBordered: {},
