@@ -5,9 +5,9 @@ CSS-in-JS library with near-zero runtime.
 ## Usage
 
 ```jsx
-import { create } from '@intrnl/stylx';
+import { createStyles } from '@intrnl/stylx';
 
-const styles = create({
+const styles = createStyles({
 	red: {
 		color: 'red',
 	},
@@ -35,16 +35,17 @@ const App = () => {
 Using the Babel plugin, this will generate...
 
 ```jsx
-const _red = '_1eyt9b0 ';
-const _redEmboldened = '_1eyt9b1 _1eyt9b0 ';
-const _underlinedOnHover = '_1eyt9b2 ';
+const _red = 'm84tdn0 ',
+	_redEmboldened = 'm84tdn1 m84tdn0 ',
+	_underlinedOnHover = 'm84tdn2 ';
 
 import * as _stylx from '@intrnl/stylx/runtime';
 
 _stylx.inject(
-	'_1eyt9b',
-	'._1eyt9b0{color:red;}._1eyt9b1{font-weight:700;}._1eyt9b2{&:hover{text-decoration:underline;}}',
+	'm84tdn',
+	'.m84tdn0{color:red;}.m84tdn1{font-weight:700;}.m84tdn2{&:hover{text-decoration:underline;}}',
 );
+
 const styles = {};
 
 const App = () => {
@@ -62,23 +63,28 @@ way that can be easily analyzed by the plugin. This can be disabled by setting `
 
 ### Keyframes and CSS variables
 
-Locally-scoped keyframes and variables can be done via the following:
+Scoped keyframes and variables can be defined via `createKeyframes` and `createVariables` respectively.
 
 ```jsx
-const styles = create({
-	'@property background': {},
-	'@keyframes spin': {
+const variables = createVariables({
+	background: {},
+});
+
+const keyframes = createKeyframes({
+	spin: {
 		to: {
 			transform: 'rotate(360deg)',
 		},
 	},
+});
 
+const styles = create({
 	root: {
-		background: 'var($background)',
-		animation: '$spin 1s linear infinite',
+		background: `var(${variables.background})`,
+		animation: `${keyframes.spin} 1s linear infinite`,
 	},
 	isHighlighted: {
-		$background: 'yellow',
+		[variables.background]: 'yellow',
 	},
 });
 ```
@@ -88,7 +94,7 @@ const styles = create({
 stylx provides an optimized utility function for concatenation. Note that you can only reference variables that can be easily analyzed, as is the case with stylx' own styles.
 
 ```jsx
-const styles = create({
+const styles = createStyles({
 	isBordered: {},
 	root: {},
 
