@@ -409,13 +409,18 @@ const compileStyleBody = (map: Map<string, DefSpec>, selector: string, rule: Sty
 				res += compileStyleKeyval(key, val);
 			}
 		} else if (name === 'selectors' && body) {
-			for (const rawSelector in body) {
-				const content = body[rawSelector];
+			for (const rawSel in body) {
+				const content = body[rawSel];
 
-				const selector =
-					rawSelector[0] !== '@' ? rawSelector.replace(REFERENCE_RE, getKeyReference(map)) : rawSelector;
+				const isAtrule = rawSel[0] === '@';
+				const isChildSelector = !isAtrule && rawSel.includes('&');
 
-				res += compileStyleBody(map, selector, content);
+				if (!isAtrule && !isChildSelector) {
+					throw new Error(`incorrect selector: ${rawSel}`);
+				}
+
+				const sel = rawSel.replace(REFERENCE_RE, getKeyReference(map));
+				res += compileStyleBody(map, sel, content);
 			}
 		} else {
 			res += compileStyleKeyval(name, body);
