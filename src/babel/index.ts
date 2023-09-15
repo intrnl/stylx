@@ -9,7 +9,6 @@ import type {
 	StyleDefinitions,
 	StyleRule,
 	VariableDefinitions,
-	VariableRule,
 } from '../index.js';
 
 import { NONDIMENSIONAL_PROPERTIES } from './constants.js';
