@@ -7,12 +7,14 @@ export type CSSProperties = {
 };
 
 export interface ChildStyleRule extends CSSProperties {
-	variables?: {
-		[key: string]: string;
-	};
-	selectors?: {
-		[key: string]: ChildStyleRule;
-	};
+	[key: `--${string}`]: string;
+
+	[key: `${string}&${string}`]: ChildStyleRule;
+
+	[key: `@container ${string}`]: ChildStyleRule;
+	[key: `@layer ${string}`]: ChildStyleRule;
+	[key: `@media ${string}`]: ChildStyleRule;
+	[key: `@supports ${string}`]: ChildStyleRule;
 }
 
 export interface StyleRule extends ChildStyleRule {
@@ -35,18 +37,6 @@ export interface VariableRule {
 	syntax?: string;
 }
 
-export type StyleDefinitions = {
-	[key: string]: StyleRule;
-};
-
-export type KeyframeDefinitions = {
-	[key: string]: KeyframeRule;
-};
-
-export type VariableDefinitions = {
-	[key: string]: VariableRule;
-};
-
 const die = () => {
 	return new Error(`stylx is not configured properly!`);
 };
@@ -63,7 +53,7 @@ export const createKeyframes = <T extends string>(
 
 export const createVariables = <T extends string>(
 	defs: Record<T, VariableRule>,
-): Readonly<Record<T, string>> => {
+): Readonly<{ [K in T]: `--${K}`}> => {
 	throw die();
 };
 

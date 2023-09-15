@@ -3,13 +3,7 @@ import * as t from '@babel/types';
 
 import { declare } from '@babel/helper-plugin-utils';
 
-import type {
-	KeyframeDefinitions,
-	KeyframeRule,
-	StyleDefinitions,
-	StyleRule,
-	VariableDefinitions,
-} from '../index.js';
+import type { KeyframeRule, StyleRule, VariableRule } from '../index.js';
 
 import { NONDIMENSIONAL_PROPERTIES } from './constants.js';
 import { murmur2 } from './hash.js';
@@ -325,9 +319,9 @@ interface DefSpec {
 }
 
 interface DefTypeMaps {
-	[DefType.STYLES]: StyleDefinitions;
-	[DefType.VARIABLES]: VariableDefinitions;
-	[DefType.KEYFRAMES]: KeyframeDefinitions;
+	[DefType.STYLES]: Record<string, StyleRule>;
+	[DefType.VARIABLES]: Record<string, VariableRule>;
+	[DefType.KEYFRAMES]: Record<string, KeyframeRule>;
 }
 
 type DefMap = Map<string, DefSpec>;
@@ -403,25 +397,9 @@ const compileStyleBody = (map: Map<string, DefSpec>, selector: string, rule: Sty
 
 		if (name === 'composes') {
 			// ignore
-		} else if (name === 'variables' && body) {
-			for (const key in body) {
-				const val = body[key];
-				res += compileStyleKeyval(key, val);
-			}
-		} else if (name === 'selectors' && body) {
-			for (const rawSel in body) {
-				const content = body[rawSel];
-
-				const isAtrule = rawSel[0] === '@';
-				const isChildSelector = !isAtrule && rawSel.includes('&');
-
-				if (!isAtrule && !isChildSelector) {
-					throw new Error(`incorrect selector: ${rawSel}`);
-				}
-
-				const sel = rawSel.replace(REFERENCE_RE, getKeyReference(map));
-				res += compileStyleBody(map, sel, content);
-			}
+		} else if (name[0] === '@' || name.includes('&')) {
+			const sel = name.replace(REFERENCE_RE, getKeyReference(map));
+			res += compileStyleBody(map, sel, body);
 		} else {
 			res += compileStyleKeyval(name, body);
 		}

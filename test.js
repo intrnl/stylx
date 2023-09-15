@@ -4,7 +4,7 @@ import stylxPlugin from './dist/babel/index.js';
 const source = `
 import * as stylx from '@intrnl/stylx';
 
-const styles = stylx.createStyles({
+const styles = stylx.create({
 	isBordered: {},
 
 	isInteractive: {},
@@ -14,12 +14,10 @@ const styles = stylx.createStyles({
 	isMultiple: {},
 
 	root: {
-		selectors: {
-			'&$isBordered': {
-				overflow: 'hidden',
-				border: '1px solid rgb(var(--divider))',
-				borderRadius: 6,
-			},
+		'&$isBordered': {
+			overflow: 'hidden',
+			border: '1px solid rgb(var(--divider))',
+			borderRadius: 6,
 		},
 	},
 	grid: {
@@ -38,14 +36,12 @@ const styles = stylx.createStyles({
 		position: 'relative',
 		overflow: 'hidden',
 
-		selectors: {
-			'&$isStandalone': {
-				aspectRatio: '16 / 9',
-			},
-			'&$isMultiple': {
-				minHeight: 0,
-				flex: '1 auto 0px',
-			},
+		'&$isStandalone': {
+			aspectRatio: '16 / 9',
+		},
+		'&$isMultiple': {
+			minHeight: 0,
+			flex: '1 auto 0px',
 		},
 	},
 	image: {
@@ -53,19 +49,17 @@ const styles = stylx.createStyles({
 		width: '100%',
 		objectFit: 'cover',
 
-		selectors: {
-			'$isInteractive &': {
-				cursor: 'pointer',
-			},
+		'$isInteractive &': {
+			cursor: 'pointer',
+		},
 
-			'$isBlurred &': {
-				scale: 1.1,
-				filter: 'blur(16px)',
-			},
-			'$isBordered$isBlurred &': {
-				filter: 'blur(8px)',
-			},
-		}
+		'$isBlurred &': {
+			scale: 1.1,
+			filter: 'blur(16px)',
+		},
+		'$isBordered$isBlurred &': {
+			filter: 'blur(8px)',
+		},
 	},
 
 	altButton: {
