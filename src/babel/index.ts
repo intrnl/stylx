@@ -88,7 +88,7 @@ export default declare<PluginOptions>((_api, options) => {
 					let result: ReturnType<typeof buildStyles>;
 
 					try {
-						result = buildStyles(obj);
+						result = buildStyles(obj, isDevelopment);
 					} catch (err) {
 						const msg = err instanceof Error ? err.message : '' + err;
 						throw objPath.buildCodeFrameError(msg);
@@ -268,7 +268,8 @@ interface DefSpec {
 	composes?: string[];
 }
 
-const buildStyles = (definitions: StyleDefinitions) => {
+const INVALID_DEBUG_NAME_RE = /\W/g;
+const buildStyles = (definitions: StyleDefinitions, debug?: boolean) => {
 	const hash = hashDefinitions(definitions);
 	const map = new Map<string, DefSpec>();
 
@@ -276,8 +277,12 @@ const buildStyles = (definitions: StyleDefinitions) => {
 	let css = '';
 
 	for (const key in definitions) {
-		const aliasedName = hash + (counter++).toString(36);
 		const body = definitions[key] as any;
+		let aliasedName = hash + (counter++).toString(36);
+
+		if (debug) {
+			aliasedName += '_' + key.replace(INVALID_DEBUG_NAME_RE, '_');
+		}
 
 		if (key.startsWith('@keyframes ')) {
 			const name = key.slice(11).trim();
