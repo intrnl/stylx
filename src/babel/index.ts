@@ -133,14 +133,22 @@ export default declare<PluginOptions>((_api, options) => {
 						const parentRefNode = parentRefPath.node;
 						const propertyPath = parentRefPath.get('property');
 
-						if ((!parentRefNode.computed && propertyPath.isIdentifier()) || propertyPath.isStringLiteral()) {
-							const propertyNode = propertyPath.node;
-							const key = propertyNode.type === 'Identifier' ? propertyNode.name : propertyNode.value;
+						let ident: t.Identifier | undefined;
 
-							const ident = idents.get(key);
-							if (ident) {
-								parentRefPath.replaceWith(ident);
+						if (parentRefNode.computed) {
+							const evaluation = propertyPath.evaluate();
+
+							if (evaluation.confident) {
+								const key = '' + evaluation.value;
+								ident = idents.get(key);
 							}
+						} else if (propertyPath.isIdentifier()) {
+							const key = propertyPath.node.name;
+							ident = idents.get(key);
+						}
+
+						if (ident) {
+							parentRefPath.replaceWith(ident);
 						}
 					}
 
