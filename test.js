@@ -4,7 +4,7 @@ import stylxPlugin from './dist/babel/index.js';
 const source = `
 import * as stylx from '@intrnl/stylx';
 
-const styles = stylx.create({
+const styles = stylx.createStyles({
 	isBordered: {},
 
 	isInteractive: {},

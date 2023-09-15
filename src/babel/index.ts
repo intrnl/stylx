@@ -398,7 +398,7 @@ const compileStyleBody = (map: Map<string, DefSpec>, selector: string, rule: Sty
 		if (name === 'composes') {
 			// ignore
 		} else if (name[0] === '@' || name.includes('&')) {
-			const sel = name.replace(REFERENCE_RE, getKeyReference(map));
+			const sel = name.replace(REFERENCE_RE, getClassReference(map));
 			res += compileStyleBody(map, sel, body);
 		} else {
 			res += compileStyleKeyval(name, body);
@@ -409,7 +409,7 @@ const compileStyleBody = (map: Map<string, DefSpec>, selector: string, rule: Sty
 
 	return res;
 };
-const getKeyReference = (map: DefMap) => {
+const getClassReference = (map: DefMap) => {
 	return (_match: string, name: string) => {
 		const def = map.get(name);
 
@@ -417,7 +417,7 @@ const getKeyReference = (map: DefMap) => {
 			throw new Error(`undefined reference: ${name}`);
 		}
 
-		return def.alias;
+		return '.' + def.alias;
 	};
 };
 
