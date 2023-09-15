@@ -115,29 +115,31 @@ export default declare<PluginOptions>((_api, options) => {
 					}
 				},
 			},
-			CallExpression(path) {
-				const callee = path.get('callee');
+			CallExpression: {
+				exit(path) {
+					const callee = path.get('callee');
 
-				if (callee.referencesImport(moduleName, 'createStyles')) {
-					injectReference ||= path;
-					handleCreateX(ctx, DefType.STYLES, path);
-					return;
-				}
-				if (callee.referencesImport(moduleName, 'createVariables')) {
-					injectReference ||= path;
-					handleCreateX(ctx, DefType.VARIABLES, path);
-					return;
-				}
-				if (callee.referencesImport(moduleName, 'createKeyframes')) {
-					injectReference ||= path;
-					handleCreateX(ctx, DefType.KEYFRAMES, path);
-					return;
-				}
+					if (callee.referencesImport(moduleName, 'createStyles')) {
+						injectReference ||= path;
+						handleCreateX(ctx, DefType.STYLES, path);
+						return;
+					}
+					if (callee.referencesImport(moduleName, 'createVariables')) {
+						injectReference ||= path;
+						handleCreateX(ctx, DefType.VARIABLES, path);
+						return;
+					}
+					if (callee.referencesImport(moduleName, 'createKeyframes')) {
+						injectReference ||= path;
+						handleCreateX(ctx, DefType.KEYFRAMES, path);
+						return;
+					}
 
-				if (callee.referencesImport(moduleName, 'join')) {
-					handleJoin(path);
-					return;
-				}
+					if (callee.referencesImport(moduleName, 'join')) {
+						handleJoin(path);
+						return;
+					}
+				},
 			},
 		},
 	};
