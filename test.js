@@ -4,7 +4,7 @@ import stylxPlugin from './dist/babel/index.js';
 const source = `
 import * as stylx from '@intrnl/stylx';
 
-const styles = stylx.create({
+const styles = stylx.createStyles({
 	isBordered: {},
 
 	isInteractive: {},
@@ -90,6 +90,7 @@ stylx.join(styles.item, standalone ? styles.isStandalone : styles.isMultiple);
 `;
 
 const result = await transformAsync(source, {
+	filename: 'stdin',
 	plugins: [[stylxPlugin, { batch: false }]],
 });
 
