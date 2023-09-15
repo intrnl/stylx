@@ -427,6 +427,7 @@ const compileKeyframe = (map: Map<string, DefSpec>, alias: string, rule: Keyfram
 		res += `}`;
 	}
 
+	res += `}`;
 	return res;
 };
 
