@@ -88,7 +88,7 @@ export default declare<PluginOptions>((_api, options) => {
 					let result: ReturnType<typeof buildStyles>;
 
 					try {
-						result = buildStyles(obj, isDevelopment);
+						result = buildStyles(obj, this.file.opts.filename || undefined, isDevelopment);
 					} catch (err) {
 						const msg = err instanceof Error ? err.message : '' + err;
 						throw objPath.buildCodeFrameError(msg);
@@ -269,8 +269,8 @@ interface DefSpec {
 }
 
 const INVALID_DEBUG_NAME_RE = /\W/g;
-const buildStyles = (definitions: StyleDefinitions, debug?: boolean) => {
-	const hash = hashDefinitions(definitions);
+const buildStyles = (definitions: StyleDefinitions, filename?: string, debug?: boolean) => {
+	const hash = hashContent(filename || definitions);
 	const map = new Map<string, DefSpec>();
 
 	let counter = 0;
@@ -477,8 +477,9 @@ const getStyleName = (map: Map<string, DefSpec>, name: string) => {
 };
 
 /// Hash
-const hashDefinitions = (definitions: StyleDefinitions) => {
-	const hash = cyrb53a(JSON.stringify(definitions)).toString(36).slice(0, 6);
+const hashContent = (content: string | StyleDefinitions) => {
+	const stringified = typeof content !== 'string' ? JSON.stringify(content) : content;
+	const hash = cyrb53a(stringified).toString(36).slice(0, 6);
 	const first = hash.charCodeAt(0);
 
 	return first >= 48 && first <= 57 ? '_' + hash : hash;
