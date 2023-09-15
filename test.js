@@ -14,10 +14,12 @@ const styles = stylx.create({
 	isMultiple: {},
 
 	root: {
-		'&$isBordered': {
-			overflow: 'hidden',
-			border: '1px solid rgb(var(--divider))',
-			borderRadius: 6,
+		selectors: {
+			'&$isBordered': {
+				overflow: 'hidden',
+				border: '1px solid rgb(var(--divider))',
+				borderRadius: 6,
+			},
 		},
 	},
 	grid: {
@@ -36,12 +38,14 @@ const styles = stylx.create({
 		position: 'relative',
 		overflow: 'hidden',
 
-		'&$isStandalone': {
-			aspectRatio: '16 / 9',
-		},
-		'&$isMultiple': {
-			minHeight: 0,
-			flex: '1 auto 0px',
+		selectors: {
+			'&$isStandalone': {
+				aspectRatio: '16 / 9',
+			},
+			'&$isMultiple': {
+				minHeight: 0,
+				flex: '1 auto 0px',
+			},
 		},
 	},
 	image: {
@@ -49,17 +53,19 @@ const styles = stylx.create({
 		width: '100%',
 		objectFit: 'cover',
 
-		'$isInteractive &': {
-			cursor: 'pointer',
-		},
+		selectors: {
+			'$isInteractive &': {
+				cursor: 'pointer',
+			},
 
-		'$isBlurred &': {
-			scale: 1.1,
-			filter: 'blur(16px)',
-		},
-		'$isBordered$isBlurred &': {
-			filter: 'blur(8px)',
-		},
+			'$isBlurred &': {
+				scale: 1.1,
+				filter: 'blur(16px)',
+			},
+			'$isBordered$isBlurred &': {
+				filter: 'blur(8px)',
+			},
+		}
 	},
 
 	altButton: {

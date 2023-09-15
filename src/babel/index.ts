@@ -3,8 +3,17 @@ import * as t from '@babel/types';
 
 import { declare } from '@babel/helper-plugin-utils';
 
-import type { KeyframeRule, StyleDefinitions, StyleRule } from '../index.js';
+import type {
+	KeyframeDefinitions,
+	KeyframeRule,
+	StyleDefinitions,
+	StyleRule,
+	VariableDefinitions,
+	VariableRule,
+} from '../index.js';
+
 import { NONDIMENSIONAL_PROPERTIES } from './constants.js';
+import { murmur2 } from './hash.js';
 
 export interface PluginOptions {
 	moduleName?: string;
@@ -19,6 +28,22 @@ export interface PluginOptions {
 	transform?: (css: string) => string;
 }
 
+interface FileContext {
+	cssSource: string;
+	hash: string;
+	counter: number;
+	transformCss?: (css: string) => string;
+	isDevelopment: boolean;
+	isLoose: boolean;
+}
+
+const createValidHash = (str: string) => {
+	const hash = murmur2(str).slice(0, 6);
+	const first = hash.charCodeAt(0);
+
+	return first >= 48 && first <= 57 ? '_' + hash : hash;
+};
+
 export default declare<PluginOptions>((_api, options) => {
 	const {
 		moduleName = '@intrnl/stylx',
@@ -29,19 +54,58 @@ export default declare<PluginOptions>((_api, options) => {
 		transform: transformCss,
 	} = options;
 
-	let hasStylxRuntime = false;
-	let importsNS: t.Identifier;
+	let ctx: FileContext;
+	let injectReference: NodePath | undefined;
 
 	return {
-		name: 'stylx',
+		name: '@intrnl/stylx',
 		visitor: {
 			Program: {
-				enter(path) {
-					hasStylxRuntime = false;
-					importsNS = path.scope.generateUidIdentifier('_stylx');
+				enter() {
+					ctx = {
+						cssSource: '',
+						hash: createValidHash(this.file.opts.filename!),
+						counter: 0,
+						isDevelopment: isDevelopment,
+						isLoose: isLoose,
+					};
+
+					injectReference = undefined;
 				},
 				exit(path) {
-					if (hasStylxRuntime) {
+					if (ctx && ctx.cssSource.length > 0) {
+						const importsNS = path.scope.generateUidIdentifier('_stylx');
+
+						let css = ctx.cssSource;
+						let expr: t.CallExpression;
+
+						if (transformCss) {
+							css = transformCss(css);
+						}
+
+						if (isDevelopment) {
+							expr = t.callExpression(t.memberExpression(importsNS, t.identifier('injectDEV')), [
+								t.stringLiteral(ctx.hash),
+								t.stringLiteral(css),
+							]);
+						} else if (isBatched) {
+							expr = t.callExpression(t.memberExpression(importsNS, t.identifier('injectBatch')), [
+								t.objectExpression([t.objectProperty(t.identifier(ctx.hash), t.stringLiteral(css))]),
+								t.stringLiteral('__STYLX_BATCH_INJECT__'),
+							]);
+						} else {
+							expr = t.callExpression(t.memberExpression(importsNS, t.identifier('inject')), [
+								t.stringLiteral(ctx.hash),
+								t.stringLiteral(css),
+							]);
+						}
+
+						if (injectReference) {
+							injectReference.insertBefore(expr);
+						} else {
+							path.unshiftContainer('body', t.expressionStatement(expr));
+						}
+
 						path.unshiftContainer(
 							'body',
 							t.importDeclaration(
@@ -55,165 +119,51 @@ export default declare<PluginOptions>((_api, options) => {
 			CallExpression(path) {
 				const callee = path.get('callee');
 
-				if (callee.referencesImport(moduleName, 'create')) {
-					const parentPath = path.parentPath;
-
-					if (!parentPath.isVariableDeclarator()) {
-						throw path.buildCodeFrameError(`stylx.create can only be used within a variable declaration`);
-					}
-
-					const varIdent = parentPath.get('id');
-					if (!varIdent.isIdentifier()) {
-						throw varIdent.buildCodeFrameError(`cannot destructure from a stylx.create`);
-					}
-
-					const args = path.get('arguments');
-
-					if (args.length !== 1) {
-						throw path.buildCodeFrameError(`stylx.create only accepts 1 argument.`);
-					}
-
-					const objPath = args[0];
-
-					if (!objPath.isObjectExpression()) {
-						throw objPath.buildCodeFrameError(`unexpected type passed to stylx.create`);
-					}
-
-					const evaluation = objPath.evaluate();
-					if (!evaluation.confident) {
-						throw evaluation.deopt!.buildCodeFrameError(`dynamic values not supported`);
-					}
-
-					const obj = evaluation.value;
-					let result: ReturnType<typeof buildStyles>;
-
-					try {
-						result = buildStyles(obj, this.file.opts.filename || undefined, isDevelopment);
-					} catch (err) {
-						const msg = err instanceof Error ? err.message : '' + err;
-						throw objPath.buildCodeFrameError(msg);
-					}
-
-					const { hash, css, map } = result;
-
-					const binding = path.scope.bindings[varIdent.node.name];
-					const referencePaths = binding.referencePaths;
-
-					const idents = new Map<string, t.Identifier>();
-					const properties: t.ObjectProperty[] = [];
-
-					for (const [key, def] of map) {
-						const ident = path.scope.generateUidIdentifier(key);
-
-						let composed = def.name;
-						if (def.type & DefType.STYLE) {
-							const composes = def.composes;
-							composed += (composes ? ' ' + composes.join(' ') : '') + ' ';
-						} else if (def.type & DefType.PROPERTY) {
-							composed = '--' + composed;
-						}
-
-						idents.set(key, ident);
-
-						path.scope.push({ kind: 'const', id: ident, init: t.stringLiteral(composed) });
-
-						if (isLoose) {
-							properties.push(t.objectProperty(t.identifier(key), ident));
-						}
-					}
-
-					for (let i = 0, ilen = referencePaths.length; i < ilen; i++) {
-						const refPath = referencePaths[i];
-						const parentRefPath = refPath.parentPath;
-
-						if (!parentRefPath || !parentRefPath.isMemberExpression()) {
-							continue;
-						}
-
-						const parentRefNode = parentRefPath.node;
-						const propertyPath = parentRefPath.get('property');
-
-						let ident: t.Identifier | undefined;
-
-						if (parentRefNode.computed) {
-							const evaluation = propertyPath.evaluate();
-
-							if (evaluation.confident) {
-								const key = '' + evaluation.value;
-								ident = idents.get(key);
-							}
-						} else if (propertyPath.isIdentifier()) {
-							const key = propertyPath.node.name;
-							ident = idents.get(key);
-						}
-
-						if (ident) {
-							parentRefPath.replaceWith(ident);
-						}
-					}
-
-					let transformedCss = css;
-
-					if (transformCss) {
-						transformedCss = transformCss(css);
-					}
-
-					path.replaceWith(t.objectExpression(properties));
-
-					if (css.length > 0) {
-						if (isDevelopment) {
-							path.insertBefore(
-								t.callExpression(t.memberExpression(importsNS, t.identifier('injectDEV')), [
-									t.stringLiteral(hash),
-									t.stringLiteral(transformedCss),
-								]),
-							);
-						} else if (isBatched) {
-							path.insertBefore(
-								t.callExpression(t.memberExpression(importsNS, t.identifier('injectBatch')), [
-									t.objectExpression([t.objectProperty(t.identifier(hash), t.stringLiteral(transformedCss))]),
-									t.stringLiteral('__STYLX_BATCH_INJECT__'),
-								]),
-							);
-						} else {
-							path.insertBefore(
-								t.callExpression(t.memberExpression(importsNS, t.identifier('inject')), [
-									t.stringLiteral(hash),
-									t.stringLiteral(transformedCss),
-								]),
-							);
-						}
-
-						hasStylxRuntime = true;
-					}
-
+				if (callee.referencesImport(moduleName, 'createStyles')) {
+					injectReference ||= path;
+					handleCreateX(ctx, DefType.STYLES, path);
+					return;
+				}
+				if (callee.referencesImport(moduleName, 'createVariables')) {
+					injectReference ||= path;
+					handleCreateX(ctx, DefType.VARIABLES, path);
+					return;
+				}
+				if (callee.referencesImport(moduleName, 'createKeyframes')) {
+					injectReference ||= path;
+					handleCreateX(ctx, DefType.KEYFRAMES, path);
 					return;
 				}
 
 				if (callee.referencesImport(moduleName, 'join')) {
-					const args = path.get('arguments');
-					let joinExpr: t.Expression | undefined;
-
-					for (let i = 0, ilen = args.length; i < ilen; i++) {
-						const arg = args[i];
-						const expr = createJoin(arg);
-
-						if (joinExpr) {
-							joinExpr = t.binaryExpression('+', joinExpr, expr);
-						} else {
-							joinExpr = expr;
-						}
-					}
-
-					path.replaceWith(joinExpr ?? t.stringLiteral(''));
+					handleJoin(path);
+					return;
 				}
 			},
 		},
 	};
 });
 
-/// stylx.join
-const createJoin = (
+/// join
+const handleJoin = (path: NodePath<t.CallExpression>) => {
+	const args = path.get('arguments');
+	let joinExpr: t.Expression | undefined;
+
+	for (let i = 0, ilen = args.length; i < ilen; i++) {
+		const arg = args[i];
+		const expr = createJoinExpr(arg);
+
+		if (joinExpr) {
+			joinExpr = t.binaryExpression('+', joinExpr, expr);
+		} else {
+			joinExpr = expr;
+		}
+	}
+
+	path.replaceWith(joinExpr ?? t.stringLiteral(''));
+};
+
+const createJoinExpr = (
 	arg: NodePath<t.ArgumentPlaceholder | t.JSXNamespacedName | t.SpreadElement | t.Expression>,
 ): t.Expression => {
 	if (arg.isLogicalExpression()) {
@@ -226,12 +176,16 @@ const createJoin = (
 			throw arg.buildCodeFrameError(`cannot statically analyze`);
 		}
 
-		return t.conditionalExpression(left.node, createJoin(right), t.stringLiteral(''));
+		return t.conditionalExpression(left.node, createJoinExpr(right), t.stringLiteral(''));
 	} else if (arg.isConditionalExpression()) {
 		const consequent = arg.get('consequent');
 		const alternate = arg.get('alternate');
 
-		return t.conditionalExpression(arg.get('test').node, createJoin(consequent), createJoin(alternate));
+		return t.conditionalExpression(
+			arg.get('test').node,
+			createJoinExpr(consequent),
+			createJoinExpr(alternate),
+		);
 	}
 
 	const evaluation = arg.evaluate();
@@ -255,73 +209,165 @@ const createJoin = (
 	return arg.node as t.Expression;
 };
 
-/// stylx.create
+/// createX
 const enum DefType {
-	STYLE = 1 << 0,
-	PROPERTY = 1 << 1,
-	KEYFRAME = 1 << 2,
+	STYLES = 'createStyles',
+	VARIABLES = 'createVariables',
+	KEYFRAMES = 'createKeyframes',
 }
 
+const handleCreateX = (ctx: FileContext, type: DefType, path: NodePath<t.CallExpression>) => {
+	const parentPath = path.parentPath;
+	if (!parentPath.isVariableDeclarator()) {
+		throw path.buildCodeFrameError(`${type} can only be used within a variable declaration`);
+	}
+
+	const varIdent = parentPath.get('id');
+	if (!varIdent.isIdentifier()) {
+		throw varIdent.buildCodeFrameError(`cannot destructure from a ${type}`);
+	}
+
+	const args = path.get('arguments');
+	if (args.length !== 1) {
+		throw path.buildCodeFrameError(`${type} only accepts 1 argument`);
+	}
+
+	const objPath = args[0];
+	if (!objPath.isObjectExpression()) {
+		throw objPath.buildCodeFrameError(`unexpected type passed to ${type}`);
+	}
+
+	const evaluation = objPath.evaluate();
+	if (!evaluation.confident) {
+		const ref = evaluation.deopt || objPath;
+
+		throw ref.buildCodeFrameError(`cannot statically analyze ${type}`);
+	}
+
+	// Run the compile step
+	let result: ReturnType<typeof buildX>;
+	try {
+		result = buildX(ctx, type, evaluation.value);
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : '' + err;
+		throw objPath.buildCodeFrameError(msg);
+	}
+
+	const { css, map } = result;
+
+	const binding = path.scope.bindings[varIdent.node.name];
+	const referencePaths = binding.referencePaths;
+
+	const idents = new Map<string, t.Identifier>();
+	const properties: t.ObjectProperty[] = [];
+
+	// Create variables
+	for (const [key, def] of map) {
+		const ident = path.scope.generateUidIdentifier(key);
+
+		let composed = def.alias;
+		if (type === DefType.STYLES) {
+			const composes = def.composes;
+			composed += (composes ? ' ' + composes.join(' ') : '') + ' ';
+		} else if (type === DefType.VARIABLES) {
+			composed = '--' + composed;
+		}
+
+		idents.set(key, ident);
+
+		path.scope.push({ kind: 'const', id: ident, init: t.stringLiteral(composed) });
+
+		if (ctx.isLoose) {
+			properties.push(t.objectProperty(t.identifier(key), ident));
+		}
+	}
+
+	// Replace references
+	for (let i = 0, ilen = referencePaths.length; i < ilen; i++) {
+		const refPath = referencePaths[i];
+		const parentRefPath = refPath.parentPath;
+
+		if (!parentRefPath || !parentRefPath.isMemberExpression()) {
+			continue;
+		}
+
+		const parentRefNode = parentRefPath.node;
+		const propertyPath = parentRefPath.get('property');
+
+		let ident: t.Identifier | undefined;
+
+		if (parentRefNode.computed) {
+			const evaluation = propertyPath.evaluate();
+
+			if (evaluation.confident) {
+				const key = '' + evaluation.value;
+				ident = idents.get(key);
+			}
+		} else if (propertyPath.isIdentifier()) {
+			const key = propertyPath.node.name;
+			ident = idents.get(key);
+		}
+
+		if (ident) {
+			parentRefPath.replaceWith(ident);
+		}
+	}
+
+	// Replace the call, add the resulting styling
+	path.replaceWith(t.objectExpression(properties));
+	ctx.cssSource += css;
+};
+
 interface DefSpec {
-	type: DefType;
-	name: string;
+	alias: string;
 	composes?: string[];
 }
 
-const INVALID_DEBUG_NAME_RE = /\W/g;
-const buildStyles = (definitions: StyleDefinitions, filename?: string, debug?: boolean) => {
-	const hash = hashContent(filename || definitions);
-	const map = new Map<string, DefSpec>();
+interface DefTypeMaps {
+	[DefType.STYLES]: StyleDefinitions;
+	[DefType.VARIABLES]: VariableDefinitions;
+	[DefType.KEYFRAMES]: KeyframeDefinitions;
+}
 
-	let counter = 0;
+type DefMap = Map<string, DefSpec>;
+
+const INVALID_DEBUG_NAME_RE = /\W/g;
+const REFERENCE_RE = /\$([\w-]+)/g;
+const REFERENCE_FULL_RE = /^\$([\w-]+)$/;
+
+const buildX = <T extends DefType>(ctx: FileContext, type: T, definitions: DefTypeMaps[T]) => {
+	const map: DefMap = new Map<string, DefSpec>();
+
 	let css = '';
 
 	for (const key in definitions) {
 		const body = definitions[key] as any;
-		let aliasedName = hash + (counter++).toString(36);
+		let alias = ctx.hash + (ctx.counter++).toString(36);
 
-		if (debug) {
-			aliasedName += '_' + key.replace(INVALID_DEBUG_NAME_RE, '_');
+		if (ctx.isDevelopment) {
+			alias += '_' + key.replace(INVALID_DEBUG_NAME_RE, '_');
 		}
 
-		if (key.startsWith('@keyframes ')) {
-			const name = key.slice(11).trim();
+		const def: DefSpec = { alias: alias };
 
-			if (map.has(name)) {
-				throw new Error(`duplicate keyframe rule: ${name}`);
-			}
-
-			css += compileKeyframe(map, aliasedName, body);
-			map.set(name, { type: DefType.KEYFRAME, name: aliasedName });
-		} else if (key.startsWith('@property ')) {
-			const name = key.slice(10).trim();
-
-			if (map.has(name)) {
-				throw new Error(`duplicate property rule: ${name}`);
-			}
-
-			map.set(name, { type: DefType.PROPERTY, name: aliasedName });
+		if (type === DefType.STYLES) {
+			css += compileStyle(map, def, alias, body);
+		} else if (type === DefType.KEYFRAMES) {
+			css += compileKeyframe(alias, body);
+		} else if (type === DefType.VARIABLES) {
+			css += compileVariable();
 		} else {
-			const name = key.trim();
-
-			if (map.has(name)) {
-				throw new Error(`duplicate style rule: ${name}`);
-			}
-
-			const spec: DefSpec = { type: DefType.STYLE, name: aliasedName };
-
-			css += compileStyle(map, spec, aliasedName, body);
-			map.set(name, spec);
+			throw die(`unexpected type: ${type}`);
 		}
+
+		map.set(key, def);
 	}
 
-	return { hash, css, map };
+	return { map, css };
 };
 
-/// Compilers
-const ATRULE_RE = /^@([a-z]+)\s+(.+)\s*/;
-
-const compileStyle = (map: Map<string, DefSpec>, def: DefSpec, alias: string, rule: StyleRule) => {
+/// createStyles
+const compileStyle = (map: DefMap, def: DefSpec, alias: string, rule: StyleRule) => {
 	if (rule.composes) {
 		def.composes = rule.composes.flatMap((name: string) => {
 			const match = REFERENCE_FULL_RE.exec(name);
@@ -333,11 +379,8 @@ const compileStyle = (map: Map<string, DefSpec>, def: DefSpec, alias: string, ru
 				if (!dep) {
 					throw new Error(`unknown compose value: ${ref}`);
 				}
-				if (!(def.type & DefType.STYLE)) {
-					throw new Error(`cannot compose from ${ref}`);
-				}
 
-				const aliased = dep.name;
+				const aliased = dep.alias;
 				const subdep = dep.composes;
 
 				return subdep ? [aliased, ...subdep] : aliased;
@@ -347,7 +390,7 @@ const compileStyle = (map: Map<string, DefSpec>, def: DefSpec, alias: string, ru
 		});
 	}
 
-	return compileStyleBody(map, `.${alias}`, rule);
+	return compileStyleBody(map, '.' + alias, rule);
 };
 const compileStyleBody = (map: Map<string, DefSpec>, selector: string, rule: StyleRule) => {
 	let res = '';
@@ -357,34 +400,24 @@ const compileStyleBody = (map: Map<string, DefSpec>, selector: string, rule: Sty
 		// @ts-expect-error
 		const body = rule[name];
 
-		if (name.includes('&')) {
-			res += compileStyleBody(map, replaceReferences(map, name, DefType.STYLE), body);
-		} else if (name.startsWith('@')) {
-			const match = ATRULE_RE.exec(name);
-
-			if (!match) {
-				throw new Error(`invalid atrule: ${name}`);
-			}
-
-			const [, atrule, args] = match;
-			res += compileStyleBody(map, `@${atrule} ${args}`, body);
-		} else if (name === 'composes') {
+		if (name === 'composes') {
 			// ignore
-		} else {
-			const animation = name.startsWith('animation');
-			const dimensional = !(name in NONDIMENSIONAL_PROPERTIES);
-
-			const hyphenated = getStyleName(map, name);
-
-			if (Array.isArray(body)) {
-				for (let i = 0, ilen = body.length; i < ilen; i++) {
-					const val = compileStyleValue(map, body[i], dimensional, animation);
-					res += `${hyphenated}:${val};`;
-				}
-			} else {
-				const val = compileStyleValue(map, body, dimensional, animation);
-				res += `${hyphenated}:${val};`;
+		} else if (name === 'variables' && body) {
+			for (const key in body) {
+				const val = body[key];
+				res += compileStyleKeyval(key, val);
 			}
+		} else if (name === 'selectors' && body) {
+			for (const rawSelector in body) {
+				const content = body[rawSelector];
+
+				const selector =
+					rawSelector[0] !== '@' ? rawSelector.replace(REFERENCE_RE, getKeyReference(map)) : rawSelector;
+
+				res += compileStyleBody(map, selector, content);
+			}
+		} else {
+			res += compileStyleKeyval(name, body);
 		}
 	}
 
@@ -392,18 +425,20 @@ const compileStyleBody = (map: Map<string, DefSpec>, selector: string, rule: Sty
 
 	return res;
 };
-const compileStyleValue = (
-	map: Map<string, DefSpec>,
-	raw: string | number,
-	dimensional: boolean,
-	animation: boolean,
-) => {
-	return dimensional && typeof raw === 'number'
-		? raw + 'px'
-		: replaceReferences(map, '' + raw, DefType.PROPERTY | (animation ? DefType.KEYFRAME : 0));
+const getKeyReference = (map: DefMap) => {
+	return (_match: string, name: string) => {
+		const def = map.get(name);
+
+		if (!def) {
+			throw new Error(`undefined reference: ${name}`);
+		}
+
+		return def.alias;
+	};
 };
 
-const compileKeyframe = (map: Map<string, DefSpec>, alias: string, rule: KeyframeRule) => {
+/// createKeyframes
+const compileKeyframe = (alias: string, rule: KeyframeRule) => {
 	let res = '';
 	res += `@keyframes ${alias}{`;
 
@@ -415,13 +450,7 @@ const compileKeyframe = (map: Map<string, DefSpec>, alias: string, rule: Keyfram
 		for (const name in body) {
 			// @ts-expect-error
 			const content = body[name];
-
-			const hyphenated = getStyleName(map, name);
-			const dimensional = !(name in NONDIMENSIONAL_PROPERTIES);
-
-			const value = compileStyleValue(map, content, dimensional, false);
-
-			res += `${hyphenated}:${value};`;
+			res += compileStyleKeyval(name, content);
 		}
 
 		res += `}`;
@@ -431,44 +460,16 @@ const compileKeyframe = (map: Map<string, DefSpec>, alias: string, rule: Keyfram
 	return res;
 };
 
-/// References
-const REFERENCE_FULL_RE = /^\$([\w-]+)$/;
-const REFERENCE_RE = /\$([\w-]+)/g;
-const replaceReferences = (map: Map<string, DefSpec>, content: string, type: number) => {
-	return content.replace(REFERENCE_RE, (_match, name) => {
-		return getReference(map, name, type);
-	});
+/// createVariables
+const compileVariable = () => {
+	return '';
 };
 
-const getReference = (map: Map<string, DefSpec>, name: string, type: number) => {
-	const def = map.get(name);
-
-	if (!def) {
-		throw new Error(`undefined reference: ${name}`);
-	}
-	if (!(def.type & type)) {
-		throw new Error(`unexpected reference usage: ${name}`);
-	}
-
-	const alias = def.name;
-
-	if (type === DefType.STYLE) {
-		return '.' + alias;
-	} else if (type === DefType.PROPERTY) {
-		return '--' + alias;
-	}
-
-	return alias;
-};
-
-/// Style property name
+// Style values
 const UPPERCASE_RE = /[A-Z]/g;
 const toHyphenLower = (match: string) => '-' + match.toLowerCase();
 
-const getStyleName = (map: Map<string, DefSpec>, name: string) => {
-	if (name[0] === '$') {
-		return getReference(map, name.slice(1), DefType.PROPERTY);
-	}
+const getStyleName = (name: string) => {
 	if (name[0] === '-' && name[1] === '-') {
 		return name;
 	}
@@ -477,32 +478,31 @@ const getStyleName = (map: Map<string, DefSpec>, name: string) => {
 	return res[0] === 'm' && res[1] === 's' && res[2] === '-' ? '-' + res : res;
 };
 
-/// Hash
-const hashContent = (content: string | StyleDefinitions) => {
-	const stringified = typeof content !== 'string' ? JSON.stringify(content) : content;
-	const hash = cyrb53a(stringified).toString(36).slice(0, 6);
-	const first = hash.charCodeAt(0);
+const compileStyleKeyval = (key: string, value: string | number | (string | number)[]) => {
+	if (Array.isArray(value)) {
+		let res = '';
 
-	return first >= 48 && first <= 57 ? '_' + hash : hash;
-};
+		for (let i = 0, ilen = value.length; i < ilen; i++) {
+			const v = value[i];
+			res += compileStyleKeyval(key, v);
+		}
 
-/**
- * https://github.com/bryc/code/blob/master/jshash/experimental/cyrb53.js
- */
-const cyrb53a = (str: string, seed = 0) => {
-	let h1 = 0xdeadbeef ^ seed;
-	let h2 = 0x41c6ce57 ^ seed;
-
-	for (let i = 0, ch; i < str.length; i++) {
-		ch = str.charCodeAt(i);
-		h1 = Math.imul(h1 ^ ch, 0x85ebca77);
-		h2 = Math.imul(h2 ^ ch, 0xc2b2ae3d);
+		return res;
 	}
 
-	h1 ^= Math.imul(h1 ^ (h2 >>> 15), 0x735a2d97);
-	h2 ^= Math.imul(h2 ^ (h1 >>> 15), 0xcaf649a9);
-	h1 ^= h2 >>> 16;
-	h2 ^= h1 >>> 16;
+	const dimensional = !(key in NONDIMENSIONAL_PROPERTIES);
 
-	return 2097152 * (h2 >>> 0) + (h1 >>> 11);
+	const name = getStyleName(key);
+	const val = compileStyleValue(value, dimensional);
+
+	return `${name}:${val};`;
+};
+
+const compileStyleValue = (raw: string | number, dimensional: boolean) => {
+	return dimensional && typeof raw === 'number' ? raw + 'px' : raw;
+};
+
+/// Miscellaneous
+const die = (msg: string) => {
+	return new Error(msg);
 };

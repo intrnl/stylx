@@ -6,48 +6,75 @@ export type CSSProperties = {
 	[Property in keyof CSSTypeProperties]: CSSTypeProperties[Property] | Array<CSSTypeProperties[Property]>;
 };
 
-export type ChildStyleRule = CSSProperties & {
-	[key: `${string}&${string}`]: StyleRule;
-	[key: `@media ${string}`]: StyleRule;
-	[key: `@supports ${string}`]: StyleRule;
-	[key: `@container ${string}`]: StyleRule;
-	[key: `@layer ${string}`]: StyleRule;
-};
+export interface ChildStyleRule extends CSSProperties {
+	variables?: {
+		[key: string]: string;
+	};
+	selectors?: {
+		[key: string]: ChildStyleRule;
+	};
+}
 
-export type StyleRule = ChildStyleRule & { composes?: string[] };
+export interface StyleRule extends ChildStyleRule {
+	composes?: string[];
+}
 
-export type KeyframeRule = {
-	[time: string]: CSSProperties;
-};
+export interface ChildKeyframeRule extends CSSProperties {
+	variables?: {
+		[key: string]: string;
+	};
+}
 
-export type PropertyRule = {
+export interface KeyframeRule {
+	[time: string]: ChildKeyframeRule;
+}
+
+export interface VariableRule {
 	inherits?: boolean;
 	initialValue?: string;
 	syntax?: string;
-};
+}
 
 export type StyleDefinitions = {
 	[key: string]: StyleRule;
-	[key: `@property ${string}`]: PropertyRule;
-	[key: `@keyframes ${string}`]: KeyframeRule;
 };
 
-export type ExtractStyleKey<T extends string | number | symbol> = T extends `@keyframes ${infer V}` ? V : T;
+export type KeyframeDefinitions = {
+	[key: string]: KeyframeRule;
+};
+
+export type VariableDefinitions = {
+	[key: string]: VariableRule;
+};
 
 const die = () => {
 	return new Error(`stylx is not configured properly!`);
 };
 
-export const create = <T extends StyleDefinitions>(
+export const createStyles = <T extends StyleDefinitions>(
 	// @ts-expect-error
 	definitions: T,
-): Readonly<Record<ExtractStyleKey<keyof T>, string>> => {
+): Readonly<Record<keyof T, string>> => {
+	throw die();
+};
+
+export const createKeyframes = <T extends KeyframeDefinitions>(
+	// @ts-expect-error
+	definitions: T,
+): Readonly<Record<keyof T, string>> => {
+	throw die();
+};
+
+export const createVariables = <T extends VariableDefinitions>(
+	// @ts-expect-error
+	definitions: T,
+): Readonly<Record<keyof T, string>> => {
 	throw die();
 };
 
 export const join = (
 	// @ts-expect-error
-	...classes: Array<string | 0 | false | undefined | null>,
+	...classes: Array<string | 0 | false | undefined | null>
 ): string => {
 	throw die();
 };
