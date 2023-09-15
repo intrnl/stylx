@@ -422,6 +422,9 @@ const getKeyReference = (map: DefMap) => {
 };
 
 /// createKeyframes
+// Pass an empty map to compileStyleBody so we can reuse the same function
+const empty: DefMap = new Map();
+
 const compileKeyframe = (alias: string, rule: KeyframeRule) => {
 	let res = '';
 	res += `@keyframes ${alias}{`;
@@ -431,10 +434,10 @@ const compileKeyframe = (alias: string, rule: KeyframeRule) => {
 
 		res += `${time}{`;
 
-		for (const name in body) {
+		for (const sel in body) {
 			// @ts-expect-error
-			const content = body[name];
-			res += compileStyleKeyval(name, content);
+			const content = body[sel];
+			res += compileStyleBody(empty, sel, content);
 		}
 
 		res += `}`;
