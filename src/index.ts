@@ -53,7 +53,7 @@ export const createKeyframes = <T extends string>(
 
 export const createVariables = <T extends string>(
 	defs: Record<T, VariableRule>,
-): Readonly<{ [K in T]: `--${K}`}> => {
+): Readonly<{ [K in T]: `--${K}` }> => {
 	throw die();
 };
 
