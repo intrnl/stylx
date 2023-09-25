@@ -8,13 +8,14 @@ import type { KeyframeRule, StyleRule, VariableRule } from '../index.js';
 import { NONDIMENSIONAL_PROPERTIES } from './constants.js';
 import { murmur2 } from './hash.js';
 
+type Mode = 'production' | 'development' | 'placeholder';
+
 export interface PluginOptions {
 	moduleName?: string;
 	runtimeModuleName?: string;
-	/** Enable development mode transformation, disabled by default */
-	development?: boolean;
-	/** Enable batch transformation for chunk optimization, disabled by default */
-	batch?: boolean;
+
+	/** Transformation mode, can be set to 'production', 'development', or 'placeholder' */
+	mode?: Mode;
 	/** Loose transformation, fills the styles object, disabled by default */
 	loose?: boolean;
 	/** Transform the resulting CSS string */
@@ -41,8 +42,7 @@ export default declare<PluginOptions>((_api, options) => {
 	const {
 		moduleName = '@intrnl/stylx',
 		runtimeModuleName = '@intrnl/stylx/runtime',
-		development: isDevelopment = false,
-		batch: isBatched = false,
+		mode = 'production',
 		loose: isLoose = false,
 		transform: transformCss,
 	} = options;
@@ -59,7 +59,7 @@ export default declare<PluginOptions>((_api, options) => {
 						cssSource: '',
 						hash: createValidHash(this.file.opts.filename!),
 						counter: 0,
-						isDevelopment: isDevelopment,
+						isDevelopment: mode === 'development',
 						isLoose: isLoose,
 					};
 
@@ -70,27 +70,31 @@ export default declare<PluginOptions>((_api, options) => {
 						const importsNS = path.scope.generateUidIdentifier('_stylx');
 
 						let css = ctx.cssSource;
-						let expr: t.CallExpression;
 
 						if (transformCss) {
 							css = transformCss(css);
 						}
 
-						if (isDevelopment) {
-							expr = t.callExpression(t.memberExpression(importsNS, t.identifier('injectDEV')), [
-								t.stringLiteral(ctx.hash),
-								t.stringLiteral(css),
-							]);
-						} else if (isBatched) {
-							expr = t.callExpression(t.memberExpression(importsNS, t.identifier('injectBatch')), [
-								t.objectExpression([t.objectProperty(t.identifier(ctx.hash), t.stringLiteral(css))]),
-								t.stringLiteral('__STYLX_BATCH_INJECT__'),
-							]);
+						const args = [t.stringLiteral(ctx.hash), t.stringLiteral(css)];
+
+						let expr: t.CallExpression | t.OptionalCallExpression;
+						if (mode === 'placeholder') {
+							expr = t.optionalCallExpression(
+								t.memberExpression(t.identifier('globalThis'), t.identifier('__stylxInjectCss')),
+								args,
+								true,
+							);
 						} else {
-							expr = t.callExpression(t.memberExpression(importsNS, t.identifier('inject')), [
-								t.stringLiteral(ctx.hash),
-								t.stringLiteral(css),
-							]);
+							const fn = mode === 'development' ? 'injectDEV' : 'inject';
+							expr = t.callExpression(t.memberExpression(importsNS, t.identifier(fn)), args);
+
+							path.unshiftContainer(
+								'body',
+								t.importDeclaration(
+									[t.importNamespaceSpecifier(importsNS)],
+									t.stringLiteral(runtimeModuleName),
+								),
+							);
 						}
 
 						if (injectReference) {
@@ -98,14 +102,6 @@ export default declare<PluginOptions>((_api, options) => {
 						} else {
 							path.unshiftContainer('body', t.expressionStatement(expr));
 						}
-
-						path.unshiftContainer(
-							'body',
-							t.importDeclaration(
-								[t.importNamespaceSpecifier(importsNS)],
-								t.stringLiteral(runtimeModuleName),
-							),
-						);
 					}
 				},
 			},

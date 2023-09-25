@@ -117,3 +117,28 @@ log(_item + (standalone ? _isStandalone : _isMultiple));
 
 log('foo' + ' ' + ('bar' + ' '));
 ```
+
+### Vite plugin
+
+An optional Vite plugin can be used to emit the styles as actual CSS files, this
+removes the runtime aspect entirely, it's recommended that it's used during
+production builds only.
+
+```jsx
+import { defineConfig } from 'vite';
+
+import stylxVitePlugin from '@intrnl/stylx/vite';
+
+export default defineConfig((ctx) => {
+	const isProduction = ctx.mode === 'production';
+
+	return {
+		plugins: [
+			// insert all other plugins...
+			isProduction && stylxVitePlugin({ include: /\.tsx?$/ }),
+		],
+	};
+});
+```
+
+You'd have to configure the plugin's `mode` to `placeholder` for this to work.

@@ -85,11 +85,8 @@ stylx.join(styles.item, standalone ? styles.isStandalone : styles.isMultiple);
 
 const result = await transformAsync(source, {
 	filename: 'stdin',
-	plugins: [[stylxPlugin, { batch: false }]],
+	plugins: [[stylxPlugin, { mode: 'placeholder' }]],
 });
 
 const code = result.code;
 console.log(code);
-
-// const re = /[a-zA-Z_$.]+\(\s*{(.+)}\s*,\s*['"]__STYLX_BATCH_INJECT__"\)/gs;
-// console.log(JSON.stringify(re.exec(code)[1].trim()));
